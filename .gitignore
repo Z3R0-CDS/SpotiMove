@@ -1,0 +1,7 @@
+
+/logs
+.cache
+config.json
+/datamodels
+/ext/logs
+/ext/__pycache__

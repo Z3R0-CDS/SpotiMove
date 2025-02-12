@@ -1,0 +1,90 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #121212;
+    color: #fff;
+    text-align: center;
+}
+.container {
+    display: flex;
+    justify-content: space-around;
+    padding: 20px;
+}
+.playlist-box {
+    width: 45%;
+    background: #222;
+    padding: 20px;
+    border-radius: 10px;
+}
+.button {
+    background-color: #7380ec;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+    margin: 20px 0;
+}
+.progress {
+    margin-top: 20px;
+    font-size: 18px;
+}
+
+
+
+/* NOTIFICATION BAR */
+
+#info-bar {
+    display: none;
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background-color: red;
+    color: white;
+    text-align: center;
+    padding: 10px;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Style for close button */
+.close-button {
+    position: relative;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    width: 12px;
+    height: 12px;
+    display: flex;
+    margin: 0 20px 15px auto;
+}
+
+@keyframes countdown {
+  0% {
+    stroke-dashoffset: 113; /* Initial length of the stroke */
+  }
+  100% {
+    stroke-dashoffset: 0; /* Stroke length after animation */
+  }
+}
+
+.countdown-svg {
+    width: 30px;
+    height: 30px;
+}
+
+.countdown-svg circle {
+    fill: none;
+    stroke: white;
+    stroke-width: 3;
+    stroke-dasharray: 113; /* Based on smaller circle size */
+    stroke-dashoffset: 113;
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+}
+
+.infobar-close-button {
+    background: transparent;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
