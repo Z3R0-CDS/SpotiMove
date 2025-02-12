@@ -1,5 +1,13 @@
 # Inforamtions to gather for developing
 
+## Contributing to SpotiMove
+- Fork
+- Create feature branches
+- Describe the improvement/fix/feature
+- KISS & DRY !
+- Also keep the changes short as I will check them manually
+    - No one likes big commits.
+
 ## About
 
 This md tells you what you need when working with tidals and spotifys api.
