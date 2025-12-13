@@ -16,7 +16,7 @@ Also for my demented mind when I no longer understand my code.
 
 ## Spotify
 
-- Developed using the python libary <a href="https://spotipy.readthedocs.io/en/2.25.0/">spotipy<a/>
+- Developed using the python library <a href="https://spotipy.readthedocs.io/en/2.25.0/">spotipy<a/>
 
 ### Needed for auth
 SPOTIPY_CLIENT_ID -> ID of your app
@@ -41,13 +41,18 @@ SPOTIPY_REDIRECT_URI -> Url to redirect to. Also you need to add that to your ap
 
 After that just let the user open the url sp_oauth.get_authorize_url() I used flasks redirect for that.
 
-## Tidal (WAHT A MESS! Holy)
+## Tidal (WHAT A MESS! Holy)
 
 ### First of all the docs and forums
   - <a href="https://developer.tidal.com/apiref?spec=catalogue-v2&ref=get-single-album&at=THIRD_PARTY">API SPECS<a/>
   - <a href="https://developer.tidal.com/">Developer Dashboard<a/> You can find Docs and App dashboard there.
 
 ### Authentication...
+
+I found a new Implementation and this segment needs new documentation. But I am exhausted so not rn.
+
+TLDR; TIDAL_CLIENT_ID & TIDAL_CLIENT_SECRET as always. From the above linked Dashboard.
+
     This code is to create the auth url.
 
     TIDAL_API_URL = "https://openapi.tidal.com/v2"

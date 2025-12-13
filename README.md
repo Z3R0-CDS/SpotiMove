@@ -24,12 +24,15 @@ The plan is a single executable wich can be used for localhost and a online vers
     Also it is under the licence 
 
 ## Issues
-- [ ] Currently tidal blocks perm requests for user.read for some reason and blocks the ip
-  - Add function to check the X-RateLimit-Remaining for rate limit issue
-  - Somehow get all 3 perms under 1 roof
+- Fixed all current issues for now. Code does need a deep scrub and patch here and there
+- Implementations for syncs are neither tested nor really developed. So that is the next step
     
 
 ## TODO
+- Overall
+  - [ ] Improve to ui (bit... well ugly)
+  - [ ] Remove legacy Tidal connection
+  - [ ] Move Spotify interactions to separate class?
 - Spotify
   - [x] Get OAuth login
   - [x] Get Playlists
@@ -37,11 +40,11 @@ The plan is a single executable wich can be used for localhost and a online vers
   - [ ] Create Playlist
   - [ ] Search for Songs via name and artist
 - TIDAL
-  - [x] Get OAuth login (NIGHTMARE)
+  - [x] Get OAuth login (NIGHTMARE!)
   - [x] Get Playlists
   - [x] Get Tracks from playlists
   - [ ] Create Playlist
-    - User.read perms needed for the endpoint I found
+    - User.read perms needed for the endpoint I found (switched api and can use user.read atm... Cannot find old api docs)
       - Rate limits or denies OAuth
   - [ ] Search for Songs via name and artist
 
