@@ -1,0 +1,6 @@
+requests
+tidalapi
+spotipy
+flask
+flask_socketio
+customtkinter
