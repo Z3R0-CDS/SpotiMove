@@ -8,7 +8,7 @@ class ConfigHandle():
 
         self.load = json.load
         self.fileName = name
-        from zero_industries_devpackage.logger import Logger
+        from zero_industries_devpackage_py.logger import Logger
         if logger!=None:
             self.logger=logger
         else:
