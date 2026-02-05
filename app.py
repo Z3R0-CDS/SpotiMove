@@ -1,17 +1,13 @@
-from flask import Flask, redirect, request, session, url_for, jsonify, render_template
-import requests
 import os
-import base64
-import hashlib
-import random
-import string
-
-from ext.config import ConfigHandle
-from spotipy.oauth2 import SpotifyOAuth
 import spotipy
+from flask import Flask, redirect, request, session, url_for, jsonify, render_template, abort
 from flask_socketio import SocketIO, emit, send
-from ext.tidalapi import TidalDeviceAuth
-from ext.new_tidalapi import TidalAPI
+from functools import wraps
+from ext.config import ConfigHandle
+from ext.legacy_tidalapi import TidalDeviceAuth
+from ext.tidalapi import TidalAPI
+from ext.spotifyapi import Spotify_API
+
 
 app = Flask(__name__)
 config = ConfigHandle()
@@ -26,31 +22,14 @@ SPOTIPY_CLIENT_SECRET = config.get_item('SPOTIFY_CLIENT_SECRET')
 SPOTIPY_REDIRECT_URI = f'{BASE_REDIRECT}/spotify'
 
 # Configure Spotify OAuth
-sp_oauth = SpotifyOAuth(
-    client_id=SPOTIPY_CLIENT_ID,
-    client_secret=SPOTIPY_CLIENT_SECRET,
-    redirect_uri=SPOTIPY_REDIRECT_URI,
-    scope='user-library-read user-library-modify playlist-modify-public playlist-read-private user-read-private'
-)
+spotify_client = Spotify_API(SPOTIPY_CLIENT_ID, SPOTIPY_CLIENT_SECRET, SPOTIPY_REDIRECT_URI)
 
 # Tidal API & OAuth
-api_v2_location = "https://api.tidal.com/v2"
-TIDAL_API_URL = "https://openapi.tidal.com/v2"
-TIDAL_AUTH_URL = "https://login.tidal.com/authorize"
-TIDAL_TOKEN_URL = "https://auth.tidal.com/v1/oauth2/token"
 TIDAL_CLIENT_ID = config.get_item('TIDAL_CLIENT_ID')
 TIDAL_CLIENT_SECRET = config.get_item('TIDAL_CLIENT_SECRET')
-TIDAL_REDIRECT_URI = 'http://localhost:5000/callback/tidal'
-TIDAL_SCOPE = 'playlists.read playlists.write user.read'
-
+# Configure Tidal OAuth
 tidal_auth = TidalDeviceAuth(TIDAL_CLIENT_ID)
 tidal_oauth = TidalAPI(client_id=TIDAL_CLIENT_ID, redirect_uri=f'{BASE_REDIRECT}/tidal')
-
-def generate_pkce():
-    """Generate PKCE code_verifier and code_challenge for Tidal OAuth."""
-    code_verifier = ''.join(random.choices(string.ascii_letters + string.digits, k=64))
-    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode('utf-8').rstrip("=")
-    return code_verifier, code_challenge
 
 
 def is_authed():
@@ -64,6 +43,16 @@ def require_auth():
     allowed_paths = ["/", "/login", "/login/spotify", "/callback/spotify", "/login/tidal", "/callback/tidal"]
     if request.path not in allowed_paths and not is_authed():
         return redirect(url_for('login'))
+
+def login_required():
+    def decorator(f):
+        # Checks if a user is logged in and otherwise redirects
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            # TODO: REPLACE THIS HOLDER WITH AUTH
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
 
 
 @app.route('/')
@@ -80,21 +69,27 @@ def login():
     return redirect(url_for('startplaylistsync'))
 
 
+###############
+# SPOTIFY API #
+###############
+
 @app.route('/login/spotify')
 def login_spotify():
     """Redirect user to Spotify login."""
-    return redirect(sp_oauth.get_authorize_url())
+    return redirect(spotify_client.get_login_url())
 
 
 @app.route('/callback/spotify')
 def spotify_callback():
     """Handle Spotify OAuth callback and store access token."""
     code = request.args.get('code')
-    token_info = sp_oauth.get_access_token(code)
+    token_info = spotify_client.fetch_token(code)
     session['spotify_token'] = token_info
     return redirect(url_for('sync_songs'))
 
-
+#############
+# TIDAL API #
+#############
 
 @app.route("/login/tidal")
 def login_tidal():
@@ -111,14 +106,6 @@ def callback_tidal():
     session["tidal_token"] = token
     return redirect(url_for('sync_songs'))
 
-@app.route("/tidal/playlists")
-def tidal_playlists():
-    if "tidal_token" not in session:
-        return redirect(url_for("login_tidal"))
-    playlists = tidal_oauth.get_user_playlists()
-    return jsonify(playlists)
-
-
 @app.route('/sync_songs')
 def sync_songs():
     """Fetch playlists from Spotify and Tidal."""
@@ -129,24 +116,16 @@ def startplaylistsync():
     # Sync Tidal to Spotify
     return render_template('bootstrap-playlists.html')
 
-def get_spotify_playlists():
-    """Retrieve the user's Spotify playlists."""
-    sp = spotipy.Spotify(auth=session['spotify_token']['access_token'])
-    return sp.current_user_playlists()['items']
-
-
 @app.route('/get_playlists')
 def get_playlists():
     """Fetch playlists from both Spotify and Tidal."""
-    try:
-        spotify_playlists = [{'name': p['name'], 'id': p['id']} for p in get_spotify_playlists()]
-    except:
+    spotify_playlists = spotify_client.get_user_playlists()
+    if not spotify_playlists or 'error' in spotify_playlists:
         spotify_playlists = {"error": "Spotify authentication failed"}
-
-    tidal_response = tidal_oauth.get_user_playlists()
-    tidal_playlists = [playlist.to_dict() for playlist in tidal_response]
-
-    return jsonify({'spotify_playlists': spotify_playlists, 'tidal_playlists': tidal_playlists})
+    else:
+        spotify_playlists = [{'name': p['name'], 'id': p['id']} for p in spotify_client.get_user_playlists()['data']]
+    tidal_response = tidal_oauth.get_user_playlists(as_dict=True)
+    return jsonify({'spotify_playlists': spotify_playlists, 'tidal_playlists': tidal_response})
 
 # SYNCING
 
@@ -155,27 +134,7 @@ def createPlayList(playlist, client='TIDAL' ):
     sp = spotipy.Spotify(auth=session['spotify_token']['access_token'])
     print(playlist)
     if client == 'TIDAL':
-        playlist = sp.playlist(playlist)
-        print(playlist)
-        songs = sp.playlist_items(playlist['id'])
-        #my-collection/playlists/folders/create-playlist
-        #https://listen.tidal.com/v2/suggestions/?countryCode=DE&locale=en_US&deviceType=BROWSER&explicit=true&hybrid=true&query=test12
-
-        access_token = session.get("tidal_token", {}).get("access_token")
-        if not access_token:
-            return {"error": "Not logged into Tidal"}, 401
-        headers = {"Authorization": f"Bearer {access_token}"}
-        playlists_url = f"{api_v2_location}/my-collection/playlists/folders/create-playlist"
-        # playlists_url = "https://listen.tidal.com/v2/my-collection/playlists/folders?folderId=root"
-        params = {"name": playlist['name'], "description": "None", "folderId": "root"}
-        response = requests.get(playlists_url, headers=headers, params=params)
-        if response.status_code == 200:
-            print(response.json())
-            return response.json()
-        else:
-            print(f"Failed to create playlist:({response.status_code}) {response.text} ")
-            return {"error": response.json()}, response.status_code
-
+        pass
 
     elif client == 'SPOTIFY':
         #Tidal search api /searchresults/{query}
@@ -211,4 +170,4 @@ def welcome(data):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, ssl_context=("./certs/localhost.pem", "./certs/localhost-key.pem"))
+    app.run(debug=config.get_item('server').get('debug', True), host=config.get_item('server').get('host_ip', '0.0.0.0'), ssl_context=("./certs/localhost.pem", "./certs/localhost-key.pem"))
