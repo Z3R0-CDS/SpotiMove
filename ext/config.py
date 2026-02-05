@@ -17,6 +17,14 @@ class ConfigHandle():
             else:
                 self.logger = Logger("Config-Handle")
 
+    def createDefaultConfig(self):
+        self.write_config({
+            "SPOTIFY_CLIENT_ID": None,
+            "SPOTIFY_CLIENT_SECRET": None,
+            "TIDAL_CLIENT_ID": None,
+            "TIDAL_CLIENT_SECRET": None
+        })
+
 
     def validateConfig(self):
         """
@@ -26,6 +34,8 @@ class ConfigHandle():
         """
         if not os.path.exists(f"{self.fileName}"):
             self.logger.warn(f"Config-file [{self.fileName}] is not on your drive!")
+            self.createDefaultConfig()
+            self.logger.warn(f"Config-file [{self.fileName}] created ENTER CREDENTIALS!")
             return False
         return True
 
