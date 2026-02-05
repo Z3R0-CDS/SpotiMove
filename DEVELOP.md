@@ -14,9 +14,15 @@ This md tells you what you need when working with tidals and spotifys api.
 
 Also for my demented mind when I no longer understand my code.
 
+## Setup
+
+Initial install can be handled using `./setup.sh`
+
+This should create a working project folder with localhost certs and everything. 
+
 ## Spotify
 
-- Developed using the python library <a href="https://spotipy.readthedocs.io/en/2.25.0/">spotipy<a/>
+- Developed using the python library <a href="https://spotipy.readthedocs.io/en/2.25.0/">spotipy</a>
 
 ### Needed for auth
 SPOTIPY_CLIENT_ID -> ID of your app
@@ -37,23 +43,35 @@ SPOTIPY_REDIRECT_URI -> Url to redirect to. Also you need to add that to your ap
     code = request.args.get('code')
     token_info = sp_oauth.get_access_token(code)
 
-- You can find scopes here.  <a href="https://developer.spotify.com/documentation/web-api/concepts/scopes">API SPECS<a/>
+- You can find scopes here.  <a href="https://developer.spotify.com/documentation/web-api/concepts/scopes">API SPECS</a>
 
 After that just let the user open the url sp_oauth.get_authorize_url() I used flasks redirect for that.
 
-## Tidal (WHAT A MESS! Holy)
+## Tidal
 
 ### First of all the docs and forums
-  - <a href="https://developer.tidal.com/apiref?spec=catalogue-v2&ref=get-single-album&at=THIRD_PARTY">API SPECS<a/>
-  - <a href="https://developer.tidal.com/">Developer Dashboard<a/> You can find Docs and App dashboard there.
+  - <a href="https://developer.tidal.com/apiref?spec=catalogue-v2&ref=get-single-album&at=THIRD_PARTY">API SPECS</a>
+  - <a href="https://developer.tidal.com/">Developer Dashboard</a> You can find Docs and App dashboard there.
 
 ### Authentication...
 
-I found a new Implementation and this segment needs new documentation. But I am exhausted so not rn.
+#### Current
+
+    Current authentication using custom diy libary
+
+    tidal_auth = TidalDeviceAuth(TIDAL_CLIENT_ID)
+    tidal_oauth = TidalAPI(client_id=TIDAL_CLIENT_ID, redirect_uri=f'{BASE_REDIRECT}/tidal')
+
+    Then on the callback url you will get the token via session
+
+    code = request.args.get('code')
+    token_info = tidal_oauth.fetch_token(code)
+
+#### (LEGACY) Kept only for documentation
 
 TLDR; TIDAL_CLIENT_ID & TIDAL_CLIENT_SECRET as always. From the above linked Dashboard.
 
-    This code is to create the auth url.
+    This code is to create the auth url. (LEGACY)
 
     TIDAL_API_URL = "https://openapi.tidal.com/v2"
     TIDAL_AUTH_URL = "https://login.tidal.com/authorize"
