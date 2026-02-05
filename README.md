@@ -1,5 +1,6 @@
 # SpotiMove
 WIP & requires support prob
+(most things are patched but software not fully developed or tested yet. Check tidal-patch branch)
 
 ## About
     Hey there fella. 
