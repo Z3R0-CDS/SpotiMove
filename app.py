@@ -119,11 +119,11 @@ def startplaylistsync():
 @app.route('/get_playlists')
 def get_playlists():
     """Fetch playlists from both Spotify and Tidal."""
-    spotify_playlists = spotify_client.get_user_playlists()
+    spotify_playlists = spotify_client.get_user_playlists(as_dict=True)
     if not spotify_playlists or 'error' in spotify_playlists:
         spotify_playlists = {"error": "Spotify authentication failed"}
     else:
-        spotify_playlists = [{'name': p['name'], 'id': p['id']} for p in spotify_client.get_user_playlists()['data']]
+        spotify_playlists = spotify_playlists['data']
     tidal_response = tidal_oauth.get_user_playlists(as_dict=True)
     return jsonify({'spotify_playlists': spotify_playlists, 'tidal_playlists': tidal_response})
 
@@ -132,13 +132,70 @@ def get_playlists():
 def createPlayList(playlist, client='TIDAL' ):
     # CURRENT WIP FUNCTION
     sp = spotipy.Spotify(auth=session['spotify_token']['access_token'])
-    print(playlist)
     if client == 'TIDAL':
         pass
 
     elif client == 'SPOTIFY':
         #Tidal search api /searchresults/{query}
         pass
+
+def syncPlaylists(spotify_playlists, tidal_playlists):
+    spotify_playlists = spotify_playlists.copy()
+    tidal_playlists = tidal_playlists.copy()
+    def track_key(track):
+        """Generate a unique key for a track based on name and artist."""
+        return f"{track.name.lower().strip()}"
+
+    # index tidal playlists by name once
+    tidal_by_name = {
+        tidal_oauth.find_playlist_by_id(pid).name: tidal_oauth.find_playlist_by_id(pid)
+        for pid in tidal_playlists
+    }
+
+    for sp_playlist_id in spotify_playlists:
+        sp_playlist = spotify_client.find_playlist_by_id(sp_playlist_id)["data"]
+
+        td_playlist = tidal_by_name.get(sp_playlist.name)
+        if not td_playlist:
+            continue  # playlist doesn't exist on Tidal
+
+        print(f"\n🔄 Syncing playlist: {sp_playlist.name}")
+
+        spotify_tracks = sp_playlist.tracks
+        tidal_tracks = td_playlist.tracks
+
+        spotify_map = {track_key(t): t for t in spotify_tracks}
+        tidal_map = {track_key(t): t for t in tidal_tracks}
+
+        spotify_keys = set(spotify_map)
+        tidal_keys = set(tidal_map)
+
+        spotify_only = spotify_keys - tidal_keys
+        tidal_only = tidal_keys - spotify_keys
+
+        # Spotify → Tidal
+        for key in spotify_only:
+            track = spotify_map[key]
+            print(f"[SPOTIFY → TIDAL] {track.name}")
+            socketio.emit(
+                "progress",
+                {"message": f"Syncing {track.name} to Tidal..."},
+                namespace="/sync",
+            )
+
+        # Tidal → Spotify
+        for key in tidal_only:
+            track = tidal_map[key]
+            print(f"[TIDAL → SPOTIFY] {track.name}")
+            socketio.emit(
+                "progress",
+                {"message": f"Syncing {track.name} to Spotify..."},
+                namespace="/sync",
+            )
+    # for playlist in spotify_playlists:
+    #     createPlayList(playlist, "TIDAL")
+    # for playlist in tidal_playlists:
+    #     createPlayList(playlist, "SPOTIFY")
 
 @app.route('/sync_selected_playlists', methods=['POST'])
 def sync_selected_playlists():
@@ -148,19 +205,7 @@ def sync_selected_playlists():
     tidal_playlists = data.get('tidal_playlists', [])
     socketio.send("Testing with testo", namespace='/sync')
 
-    for playlist in spotify_playlists:
-        socketio.emit('progress', {'message': f'Syncing {playlist} to Tidal...'}, namespace='/sync')
-        for tdplaylist in tidal_playlists:
-            if tdplaylist['name'] == playlist['name']:
-                # TODO append missing songs
-                pass
-        createPlayList(playlist, "TIDAL")
-
-        # Implement sync logic here
-
-    for playlist in tidal_playlists:
-        socketio.emit('progress', {'message': f'Syncing {playlist} to Spotify...'}, namespace='/sync')
-        # Implement sync logic here
+    syncPlaylists(spotify_playlists, tidal_playlists)
 
     return jsonify({'message': 'Sync completed'})
 
