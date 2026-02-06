@@ -4,6 +4,8 @@
 config.json
 
 playlists.json
+tidal_playlists_response.json
+spotify_playlist_response.json
 
 /datamodels
 /ext/logs
