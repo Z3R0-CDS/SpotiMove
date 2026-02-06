@@ -25,6 +25,7 @@ import requests
 from urllib.parse import urlencode
 import json
 from dataclasses import dataclass, is_dataclass
+from ext.music_platform import Playlist, Track, Artist, Platform, MusicApi
 
 
 @dataclass
@@ -72,6 +73,7 @@ class TidalPlaylist:
     name: str
     songs: list[TidalSong]
     created_at: str
+    description: str = ""
 
     def __init__(self, data: dict, songs: list[TidalSong]=[]):
         # TIDAL shape
@@ -80,6 +82,8 @@ class TidalPlaylist:
         self.name = attributes['name']
         self.songs = songs
         self.created_at = attributes['createdAt']
+        self.description = attributes.get('description', '')
+        self.public = attributes.get('accessType', "PRIVATE") == 'PUBLIC'
 
     def to_dict(self):
         def serialize(obj):
@@ -97,7 +101,7 @@ class TidalPlaylist:
     def to_json(self):
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
-class TidalAPI:
+class TidalAPI(MusicApi):
     AUTH_URL = "https://login.tidal.com/authorize"
     TOKEN_URL = "https://auth.tidal.com/v1/oauth2/token"
     API_BASE = "https://openapi.tidal.com/v2"  # v1 endpoints for user data
@@ -114,6 +118,8 @@ class TidalAPI:
         self.user_id = None
         self.user = None
 
+        super().__init__(Platform.TIDAL)
+
     # -----------------------------
     # PKCE GENERATION
     # -----------------------------
@@ -126,7 +132,7 @@ class TidalAPI:
     # -----------------------------
     # LOGIN URL
     # -----------------------------
-    def get_login_url(self):
+    def get_login_url(self) -> str:
         code_challenge = self._generate_pkce()
         params = {
             "response_type": "code",
@@ -141,7 +147,7 @@ class TidalAPI:
     # -----------------------------
     # EXCHANGE CODE FOR TOKEN
     # -----------------------------
-    def fetch_token(self, code):
+    def fetch_token(self, code) -> str:
         if not self.code_verifier:
             raise Exception("Missing PKCE code_verifier. Start login first.")
 
@@ -216,44 +222,102 @@ class TidalAPI:
     # -----------------------------
     # PLAYLIST METHODS
     # -----------------------------
-    def get_user_playlists(self, as_dict=False) -> list[TidalPlaylist] | list[dict]:
+    def get_user_playlists(self, as_dict=False, with_tracks=False) -> list[Playlist] | list[dict]:
         params = {
             "filter[owners.id]": self.user_id,
             "countryCode": self.user.country,
             "include": "coverArt,ownerProfiles,items",
-            "sort": "-lastModifiedAt"
+            "sort": "-lastModifiedAt",
         }
-        playlists = [TidalPlaylist(playlist) for playlist in self.get('/playlists', params=params)["data"]]
+
+        playlists: list[Playlist] = []
+        cursor = None
+
+        while True:
+            if cursor:
+                params["page[cursor]"] = cursor
+            else:
+                params.pop("page[cursor]", None)
+
+            response = self.get("/playlists", params=params)
+
+            # collect playlists
+            playlists.extend(
+                Playlist(p, platform=self.platform)
+                for p in response.get("data", [])
+            )
+
+            # read next cursor
+            cursor = (
+                response
+                .get("links", {})
+                .get("meta", {})
+                .get("nextCursor")
+            )
+
+            # last page
+            if not cursor:
+                break
+
+        # optional: fetch tracks
+        if with_tracks:
+            for playlist in playlists:
+                playlist.tracks = self.fetch_playlistTracks(playlist.id)
+        with open("tidal_playlists_response.json", "w") as f:
+            json.dump([playlist.to_dict() for playlist in playlists], f, indent=2)
         if as_dict:
             return [playlist.to_dict() for playlist in playlists]
+
         return playlists
-        #return self.get(f"/users/{self.user_id}/playlists")
 
-    def fetch_playlistSongs(self, playlist_id) -> list[TidalSong]:
-        # : "/playlists/52b1b166-2182-47fd-a04d-f1dffc373361/relationships/items?countryCode=DE&sort=-lastModifiedAt"
+
+    def fetch_playlistTracks(self, playlist_id) -> list[Track]:
         params = {
-            'countryCode': self.user.country,
-            'sort': '-lastModifiedAt',
-            'include': 'items',
+            "countryCode": self.user.country,
+            "sort": "-lastModifiedAt",
+            "include": "items,items.artists",
         }
-        # songs = self.get(f'/playlists/{playlist_id}/relationships/items', params=params)["data"]
-        # print(json.dumps(songs, indent=2))
-        #songs = [self.fetch_songdata(song['id']) for song in self.get(f'/playlists/{playlist_id}/relationships/items', params=params)["data"]]
-        songs = self.fetch_playlist_song_data([song['id'] for song in self.get(f'/playlists/{playlist_id}/relationships/items', params=params)["data"]])
-        for song in songs:
-            print(f"{song.name} ({song.id})")
-        songs = [TidalSong(song) for song in
-                 self.get(f'/playlists/{playlist_id}/relationships/items', params=params)["data"]]
-        return songs
 
-    def fetch_playlist_song_data(self, songs: list[str]) -> list[TidalSong]:
+        response = self.get(
+            f"/playlists/{playlist_id}/relationships/items",
+            params=params,
+        )
+
+        data = response.get("data", [])
+        included = response.get("included", [])
+
+        # index included objects by (type, id)
+        included_index = {
+            (obj["type"], obj["id"]): obj
+            for obj in included
+        }
+
+        tracks = []
+
+        for item in data:
+            track = included_index.get(("tracks", item["id"]))
+            if not track:
+                continue
+
+            # resolve artists
+            artist_names = []
+            for artist_ref in track.get("relationships", {}).get("artists", {}).get("data", []):
+                artist = included_index.get(("artists", artist_ref["id"]))
+                if artist:
+                    artist_names.append({'name': artist["attributes"]["name"], 'id': artist_ref['id']})
+
+            track["artistNames"] = artist_names
+            tracks.append(Track(track, platform=self.platform))
+
+        return tracks
+
+    def fetch_playlist_track_data(self, tracks: list[str]) -> list[TidalSong]:
         params = {
-            'filter[id]': [song for song in songs],
+            'filter[id]': [track for track in tracks],
             'include': 'coverArt,artists,genres',
             'countryCode': self.user.country
         }
-        songs = [TidalSong(data) for data in self.get(f'/tracks', params=params)['data']]
-        return songs
+        return self.get(f'/tracks', params=params)['data']
 
     def create_playlist(self, title, description=""):
         payload = {"title": title, "description": description}
@@ -265,7 +329,35 @@ class TidalAPI:
 
     def get_playlist_items(self, playlist_id):
         return self.get(f"/playlists/{playlist_id}/items")
+    
+    def remove_tracks_from_playlist(self, playlist, tracks):
+        return super().remove_tracks_from_playlist(playlist, tracks)
 
     def get_track(self, track_id):
         return self.get(f"/tracks/{track_id}")
 
+    def find_playlist_by_name(self, name) -> Playlist:
+        playlists = self.get_user_playlists()
+        for playlist in playlists:
+            if playlist.name.lower() == name.lower():
+                return playlist
+        raise Exception("Playlist not found")
+    
+    def find_playlist_by_id(self, playlist_id, as_dict=False) -> Playlist:
+        playlist_data = self.get(f"/playlists/{playlist_id}")
+        tracks = self.fetch_playlistTracks(playlist_id)
+        playlist=playlist_data['data']
+        playlist['tracks'] = tracks
+        if as_dict:
+            return Playlist(playlist, platform=self.platform, with_tracks=True).to_dict()
+        return Playlist(playlist, platform=self.platform, with_tracks=True)
+    
+    def find_track(self, track):
+        params = {
+            'filter[name]': track.name,
+            'filter[artistName]': track.artist.name if isinstance(track.artist, Artist) else track.artist,
+            'include': 'artists',
+            'countryCode': self.user.country
+        }
+        results = self.get('/tracks', params=params).get('data', [])
+        return [Track(result, platform=self.platform) for result in results]
