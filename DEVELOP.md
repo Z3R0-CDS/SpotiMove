@@ -23,6 +23,7 @@ This should create a working project folder with localhost certs and everything.
 ## Spotify
 
 - Developed using the python library <a href="https://spotipy.readthedocs.io/en/2.25.0/">spotipy</a>
+- Spotify docs are found <a href="https://developer.spotify.com/documentation/web-api">here</a>
 
 ### Needed for auth
 SPOTIPY_CLIENT_ID -> ID of your app
